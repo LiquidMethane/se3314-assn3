@@ -2,14 +2,9 @@ let net = require('net'),
     cPTPpacket = require('./cPTPmessage'),
     singleton = require('./Singleton');
 
-let peerTable = {},
-    firstPeerIP = {},
-    firstPeerPort = {},
-    isFull = {};
-
 
 module.exports = {
-    handleClientJoining: function (sock, maxPeers, sender, peerTable) {
+    handleClientJoining: function (sock, maxPeers, sender, peerTable) { //when other peer join you
         let peersCount = Object.keys(peerTable).length;
         if (peersCount === maxPeers) {
             declineClient(sock, sender, peerTable);
@@ -18,56 +13,115 @@ module.exports = {
         }
     },
 
-    handleCommunications: function (client, maxPeers, location, peerTable) {
-        // get message from server
+    handleCommunications: function (client, maxPeers, location, peerTable, peeringDeclinedTable) {
+
+        // add peer to peer table and mark as pending
+        peerTable.push({ 'port': client.remotePort, 'IP': client.remoteAddress, "pending": true });
 
         client.on('data', (message) => {
+            let returned_peer = {}
+
             let version = bytes2number(message.slice(0, 3));
             let msgType = bytes2number(message.slice(3, 4));
             let sender = bytes2string(message.slice(4, 8));
             let numberOfPeers = bytes2number(message.slice(8, 12));
-            let reserved = bytes2number(message.slice(12, 14));
-            let peerPort = bytes2number(message.slice(14, 16));
-            let peerIP = bytes2number(message.slice(16, 17)) + '.'
-                + bytes2number(message.slice(17, 18)) + '.'
-                + bytes2number(message.slice(18, 19)) + '.'
-                + bytes2number(message.slice(19, 20));
 
-            if (msgType == 1) {
-                isFull[client.remotePort] = false;
-                console.log("Connected to peer " + sender + ":" + client.remotePort + " at timestamp: " + singleton.getTimestamp());
+            //populate returned_peer array with returned peers
+            for (let i = 0; i < numberOfPeers; i++) {
+                let reserved = bytes2number(message.slice(12 + 8 * i, 14 + 8 * i));
+                let peerPort = bytes2number(message.slice(14 + 8 * i, 16 + 8 * i));
+                let peerIP = bytes2number(message.slice(16 + 8 * i, 17 + 8 * i)) + '.'
+                    + bytes2number(message.slice(17 + 8 * i, 18 + 8 * i)) + '.'
+                    + bytes2number(message.slice(18 + 8 * i, 19 + 8 * i)) + '.'
+                    + bytes2number(message.slice(19 + 8 * i, 20 + 8 * i));
 
-                // add the server (the receiver request) into the table
-                let receiverPeer = {'port': client.remotePort, 'IP': client.remoteAddress};
-                peerTable[1] = receiverPeer;
 
-                // Now run as a server
-                let serverPeer = net.createServer();
-                serverPeer.listen(client.localPort, client.localAddress);
-                console.log('This peer address is ' + client.localAddress + ':' + client.localPort + ' located at ' + location);
-                serverPeer.on('connection', function (sock) {
-                    let peersCount = Object.keys(peerTable).length;
-                    if (peersCount === maxPeers) {
-                        declineClient(sock, location, peerTable);
-                    } else {
-                        handleClient(sock, location, peerTable)
-                    }
+                if (peerPort !== client.localPort && peerIP !== client.localAddress)
+                    returned_peer.push({ 'port': peerPort, 'IP': peerIP })
+
+            }
+
+
+            if (msgType == 1) { //server welcomes you
+
+                //keep peer in peer table and untick pending state
+                peerTable.forEach(element => {
+                    if (element["port"] === client.remotePort && element["IP"] === client.remoteAddress)
+                        element["pending"] = false;
                 });
 
+                //logging information
+                console.log("Connected to peer " + sender + ":" + client.remotePort + " at timestamp: " + singleton.getTimestamp());
+
+                //logging information
                 console.log("Received ack from " + sender + ":" + client.remotePort);
                 if ((numberOfPeers > 0) && (client.localPort != peerPort))
                     console.log("  which is peered with: " + peerIP + ":" + peerPort);
 
-            } else {
+
+            } else { //server rejects you
+
+                //remove peer from peer table
+                for (let i = 0; i < peerTable.length; i++) {
+                    if (peerTable[i]["port"] === client.remotePort && peerTable[i]["IP"] === client.remoteAddress) {
+                        peerTable.splice(i, 1);
+                        break;
+                    }
+                }
+
+                //add peer into peeringdeclined table
+                let dec_index = peeringDeclinedTable.length % maxPeers;
+                peeringDeclinedTable[dec_index] = { 'port': client.remotePort, 'IP': client.remoteAddress };
+
+
                 console.log("Received ack from " + sender + ":" + client.remotePort);
-                isFull[client.remotePort] = true;
                 if (numberOfPeers > 0)
-                    console.log("  which is peered with: " + peerIP + ":" + peerPort);
+                    console.log("  which is peered with: " + peerIP + ":" + peerPort); //needs change!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 console.log("Join redirected, try to connect to the peer above.");
             }
         });
+
+        //handle server shut down socket
         client.on('end', () => {
-            if (isFull[client.remotePort]) process.exit();
+
+            //check if item in returned list already exists in peer table, if not, send out request and add into peer table and mark as pending
+            //stop when peer table is full, or returned list is exhausted.
+
+            returned_peer.forEach(element => { //loop each item in returned peer table
+
+                //check if peer table is full
+                if (!peerTable.length == maxPeers) {
+
+                    //if not full, check if peer exists in peer table or peeringDelined table
+                    if (!peerTable.contains(element['port'], element['IP']) && !peeringDeclinedTable.contains(element['port'], element['IP'])) {
+
+                        //peer does not exist in peer table or peering declined table, send request
+                        client.connect(element['port'], element['IP'], function () {
+                            handler.handleCommunications(client, maxPeers, location, peerTable, peeringDeclinedTable);
+                        });
+
+                    }
+
+                } else {
+                    break;
+                }
+            });
+
+            //check condition (no pending peer) and start server
+            if (!hasPendingPeer(peerTable)) {
+                // Now run as a server, create server and listen at localport and local address
+                let serverPeer = net.createServer();
+                serverPeer.listen(client.localPort, client.localAddress);
+
+                //logging information
+                console.log('This peer address is ' + client.localAddress + ':' + client.localPort + ' located at ' + location);
+
+                //handle incomming connection
+                serverPeer.on('connection', function (sock) {
+                    handleClientJoining(sock, maxPeers, location, peerTable);
+                });
+            }
+
         });
 
     }
@@ -94,9 +148,8 @@ function declineClient(sock, sender, peerTable) {
 }
 
 function addClient(sock, peerTable) {
-    let peersCount = Object.keys(peerTable).length;
-    let joiningPeer = {'port': sock.remotePort, 'IP': sock.remoteAddress};
-    peerTable[++peersCount] = joiningPeer;
+
+    peerTable.push({ 'port': sock.remotePort, 'IP': sock.remoteAddress, 'pending': false });
 
     let peerAddress = sock.remoteAddress + ':' + sock.remotePort;
     console.log('\nConnected from peer ' + peerAddress);
@@ -117,4 +170,20 @@ function bytes2number(array) {
         result ^= array[array.length - i - 1] << 8 * i;
     }
     return result;
+}
+
+Array.prototype.contains = (port, IP) => {
+    this.forEach(element => {
+        if (element['port'] === port && element['IP'] === IP)
+            return true;
+    });
+    return false;
+}
+
+function hasPendingPeer(array) {
+    array.forEach(element => {
+        if (element['pending'] == true)
+            return true;
+    });
+    return false;
 }

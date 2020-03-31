@@ -8,7 +8,7 @@ let os = require('os');
 let ifaces = os.networkInterfaces();
 let HOST = '';
 let PORT = singleton.getPort(); //get random port number
-let maxpeers = 2;
+let maxpeers = 6;
 
 // get the loaclhost ip address
 Object.keys(ifaces).forEach(function (ifname) {
@@ -31,7 +31,11 @@ if (process.argv.length > 2) {
     let firstFlag = process.argv[2]; // should be -p
     let hostserverIPandPort = process.argv[3].split(':');
     let secondFlag = process.argv[4]; // should be -n
-    maxpeers = process.argv[5] || 2;
+    maxpeers = process.argv[5] || 6; //each peer supports 6 other peers by default
+    if (maxpeers < 1) {
+        console.log(`Maxpeer must be >= 1`);
+        return;
+    }
     let thirdFlag = process.argv[6]; // should be -v
     let ITPVersion = process.argv[7] || '3314';
     let knownHOST = hostserverIPandPort[0];
@@ -39,11 +43,17 @@ if (process.argv.length > 2) {
 
     // connect to the known peer address
     let clientPeer = new net.Socket();
+
+    //establish peer connection
     clientPeer.connect(knownPORT, knownHOST, function () {
         // initialize peer table
         let peerTable = {};
-        handler.handleCommunications(clientPeer, maxpeers, peerLocation, peerTable);
+        let peeringDeclinedTable = {};
+        
+        handler.handleCommunications(clientPeer, maxpeers, peerLocation, peerTable, peeringDeclinedTable);
     });
+
+
 } else {
     // call as node peer
 
