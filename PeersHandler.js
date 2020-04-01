@@ -55,8 +55,12 @@ module.exports = {
 
                 //logging information
                 console.log("Received ack from " + sender + ":" + client.remotePort);
-                if ((numberOfPeers > 0) && (client.localPort != peerPort))
-                    console.log("  which is peered with: " + peerIP + ":" + peerPort);
+                returned_peer.forEach(element => {
+                    console.log("  which is peered with: " + element['IP'] + ":" + element['port']);
+                });
+
+                // if ((numberOfPeers > 0) && (client.localPort != peerPort))
+                //     console.log("  which is peered with: " + peerIP + ":" + peerPort);
 
 
             } else { //server rejects you
@@ -75,8 +79,11 @@ module.exports = {
 
 
                 console.log("Received ack from " + sender + ":" + client.remotePort);
-                if (numberOfPeers > 0)
-                    console.log("  which is peered with: " + peerIP + ":" + peerPort); //needs change!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                returned_peer.forEach(element => {
+                    console.log("  which is peered with: " + element['IP'] + ":" + element['port']);
+                });
+                // if (numberOfPeers > 0)
+                //     console.log("  which is peered with: " + peerIP + ":" + peerPort); //needs change!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 console.log("Join redirected, try to connect to the peer above.");
             }
         });
@@ -102,7 +109,7 @@ module.exports = {
 
                     }
 
-                } else {
+                } else { //if peer table is full just quit
                     break;
                 }
             });
