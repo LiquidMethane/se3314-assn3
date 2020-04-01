@@ -48,24 +48,25 @@ module.exports = {
         let n4 = noOfPeers << 24;
         this.message[11] = (n4 >>> 24);
 
-        // if number of peer not zero
-        if (noOfPeers > 0) {
-            // fourth 4 bytes
-            // 2 bytes reserved
-            this.message[12] = '';
-            this.message[13] = '';
-            // 2 bytes peer port
-            let p1 = port << 16;
-            this.message[14] = (p1 >>> 24);
-            let p2 = port << 24;
-            this.message[15] = (p2 >>> 24);
+        //add all peers in peer table to message
+        for (let i = 0; i < noOfPeers; i++) {
+            
+            //reserved
+            this.message[12 + 8 * i] = '';
+            this.message[13 + 8 * i] = '';
 
-            // fifth 4 bytes
-            let IP = peerIP.split('.');
-            this.message[16] = IP[0];
-            this.message[17] = IP[1];
-            this.message[18] = IP[2];
-            this.message[19] = IP[3];
+            //port
+            let p1 = peerTable[i]['port'] << 16;
+            let p2 = peerTable[i]['port'] << 24;
+            this.message[14 + 8 * i] = (p1 >>> 24);
+            this.message[15 + 8 * i] = (p2 >>> 24);
+
+            //address
+            let ip = peerTable[i]['IP'].split('.');
+            this.message[16 + 8 * i] = IP[0];
+            this.message[17 + 8 * i] = IP[1];
+            this.message[18 + 8 * i] = IP[2];
+            this.message[19 + 8 * i] = IP[3];
         }
     },
 
