@@ -47,9 +47,9 @@ client.on('end', () => {
     console.log("    --Image size = " + (header[12] << 24 ^ header[13] << 16 ^ header[14] << 8 ^ header[15]));
     console.log();
     ////////////////////////////////////////
-    client.end();
+    // client.end();
     //client.destroy();
-
+    console.log('Disconnected from the server');
 });
 
 // Add a 'close' event handler for the client socket
@@ -57,6 +57,6 @@ client.on('close', function () {
     console.log('Connection closed');
 });
 
-client.on('end', () => {
-    console.log('Disconnected from the server');
-});
+// client.on('end', () => {
+    
+// });

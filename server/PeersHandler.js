@@ -28,8 +28,8 @@ function handleClientJoining(sock, data, maxPeers, sender, peerTable) { //when o
             handleClient(sock, port, sender, peerTable)
         }
 
-        console.log("\ncurrent peer table: ");
-        console.log(peerTable);
+        // console.log("\ncurrent peer table: ");
+        // console.log(peerTable);
     }
 
     else {
@@ -45,11 +45,11 @@ function handleClientJoining(sock, data, maxPeers, sender, peerTable) { //when o
         });
 
         // console.log(`\nsearch ID list`);
-        console.log(searchIDList);
+        // console.log(searchIDList);
 
         if (!idExists) {
 
-            console.log(`\nsearch id ${id} does not exist`);
+            // console.log(`\nsearch id ${id} does not exist`);
 
             //stores id in search id list
             if (searchIDList.length == maxPeers)
@@ -63,7 +63,7 @@ function handleClientJoining(sock, data, maxPeers, sender, peerTable) { //when o
                 + bytes2number(data.slice(19, 20));
             let imageFilename = bytes2string(data.slice(20));
 
-            console.log(`\nid: ${id}\nport: ${peerPort}\nIP: ${peerIP}\nimage file name: ${imageFilename}`);
+            // console.log(`\nid: ${id}\nport: ${peerPort}\nIP: ${peerIP}\nimage file name: ${imageFilename}`);
 
             fs.readFile('./images/' + imageFilename, (err, data) => {
                 if (!err) {
@@ -80,13 +80,13 @@ function handleClientJoining(sock, data, maxPeers, sender, peerTable) { //when o
                         let socket = new net.Socket();
                         socket.connect(peerPort, peerIP, () => {
                             socket.end(ITPpacket.getPacket());
-                            console.log(`Image found and returned to originating peer`);
+                            console.log(`\nImage found and returned to originating peer`);
                         });
 
 
                     });
                 } else { //file not found
-                    console.log('File not found');
+                    console.log('File not found in local database');
 
                     cPTPpacket.init(3, sender, peerTable, id, peerPort, peerIP, imageFilename);
                     let queryMessage = cPTPpacket.getPacket();
@@ -100,7 +100,7 @@ function handleClientJoining(sock, data, maxPeers, sender, peerTable) { //when o
                                 let socket = new net.Socket();
                                 socket.connect(peer['port'], peer['IP'], () => {
                                     socket.end(queryMessage);
-                                    console.log(`sent search query to ${peer['IP']}:${peer['port']}`);
+                                    console.log(`\nsent search query to ${peer['IP']}:${peer['port']}`);
                                 });
                             }
                         }
@@ -122,14 +122,17 @@ function handleImageClient(sock, sender, peerTable, maxPeers) {
 
     assignClientName(sock, nickNames);
 
-    console.log('\n' + nickNames[sock.id] + ' is connected at timestamp: ' + startTimestamp[sock.id]);
+    let type;
 
     sock.on('data', data => {
 
         let msgType = bytes2number(data.slice(3, 4));
+        type = msgType;
 
         if (msgType == 0) {
             imageDBSocket = sock;
+            
+            console.log('\n' + nickNames[sock.id] + ' is connected at timestamp: ' + startTimestamp[sock.id]);
             handleClientRequests(data, sender, sock, peerTable); //read client requests and respond
         }
 
@@ -149,8 +152,15 @@ function handleImageClient(sock, sender, peerTable, maxPeers) {
                     sequenceNumberList.splice(0, 1);
                 sequenceNumberList.push(sn);
 
-                imageDBSocket.write(data);
-                imageDBSocket.end();
+                if (imageDBSocket != null) {
+                    imageDBSocket.end(data);
+
+                    console.log(`\nImage received and forwarded to client.`);
+
+                }
+                    
+                imageDBSocket = null;
+                // imageDBSocket.end();
 
             }
 
@@ -159,8 +169,8 @@ function handleImageClient(sock, sender, peerTable, maxPeers) {
     });
 
     sock.on('end', () => {
-
-        handleClientLeaving(sock);
+        if (type == 0)
+            handleClientLeaving(sock);
     });
 
     sock.on('close', function () {
@@ -170,6 +180,9 @@ function handleImageClient(sock, sender, peerTable, maxPeers) {
 
 function handleClientRequests(data, sender, sock, peerTable) {
     let version = bytes2number(data.slice(0, 3));
+
+    if (version != 3314) return console.log(`\nwrong version number`);
+
     let requestType = bytes2number(data.slice(3, 4));
     let imageFilename = bytes2string(data.slice(4));
 
@@ -192,10 +205,10 @@ function handleClientRequests(data, sender, sock, peerTable) {
                 sock.end(ITPpacket.getPacket());
             });
         } else { //file not found
-            console.log('File not found');
+            console.log('\nFile not found in local database.');
 
             let id = singleton.getId();
-            console.log(id);
+            // console.log(id);
             // console.log(queryMessage);
 
             peerTable.forEach(peer => {
@@ -208,7 +221,7 @@ function handleClientRequests(data, sender, sock, peerTable) {
                         let queryMessage = cPTPpacket.getPacket();
 
                         socket1.end(queryMessage);
-                        console.log(`sent search query to ${peer['IP']}:${peer['port']}`);
+                        console.log(`\nsent search query to ${peer['IP']}:${peer['port']}`);
 
                     })
                 }
@@ -241,6 +254,9 @@ function handleCommunications(peerLocalPort, client, maxPeers, location, peerTab
     client.on('data', (message) => {
 
         let version = bytes2number(message.slice(0, 3));
+
+        if (version != 3314) return console.log(`\nwrong version number`);
+
         let msgType = bytes2number(message.slice(3, 4));
         let sender = bytes2string(message.slice(4, 8));
 
@@ -318,10 +334,10 @@ function handleCommunications(peerLocalPort, client, maxPeers, location, peerTab
 
         }
 
-        console.log(`\ncurrent peer table: `);
-        console.log(peerTable);
-        console.log(`\ncurrent peering declined table: `);
-        console.log(peeringDeclinedTable);
+        // console.log(`\ncurrent peer table: `);
+        // console.log(peerTable);
+        // console.log(`\ncurrent peering declined table: `);
+        // console.log(peeringDeclinedTable);
 
 
 
@@ -396,7 +412,7 @@ function handleCommunications(peerLocalPort, client, maxPeers, location, peerTab
 
             //handle incomming connection
             serverPeer.on('connection', function (sock) {
-                console.log(`\nnew connection established.`);
+                // console.log(`\nnew connection established.`);
                 // handleClientJoining(sock, maxPeers, location, peerTable);
                 sock.on('data', data => {
                     handleClientJoining(sock, data, maxPeers, location, peerTable);
@@ -417,7 +433,7 @@ function handleCommunications(peerLocalPort, client, maxPeers, location, peerTab
 
 
 function handleClientLeaving(sock) {
-    console.log(nickNames[sock.id] + ' closed the connection');
+    console.log('\n' + nickNames[sock.id] + ' closed the connection');
 }
 
 function assignClientName(sock, nickNames) {
