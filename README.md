@@ -4,4 +4,4 @@ Run `copy-to-test.bat` in terminal to create 6 peer nodes located at `..\se3314-
 
 if prompted **_Does `path` specify a file name or directory name on the target?_**, respond `d`.
 
-**_Remember to run `npm i` before running copy script to make sure `node_modules` folder also gets copied_**
+**_Remember to run `npm i` before running copy script to make sure `node_modules` folder also gets copied._**
