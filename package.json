@@ -1,0 +1,23 @@
+{
+  "name": "se3314-assn3",
+  "version": "1.0.0",
+  "description": "",
+  "main": "peer2peerDB.js",
+  "dependencies": {
+    "command-line-args": "^5.1.1"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LiquidMethane/se3314-assn3.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/LiquidMethane/se3314-assn3/issues"
+  },
+  "homepage": "https://github.com/LiquidMethane/se3314-assn3#readme"
+}

@@ -1,5 +1,4 @@
 //size of the response packet header:
-let HEADER_SIZE = 20;
 
 //Fields that compose the header
 let version,
@@ -9,9 +8,8 @@ module.exports = {
     message: '', //Bitstream of the cPTP header
 
     init: function (msgType, sender, peerTable) {
-        let noOfPeers = Object.keys(peerTable).length,
-            port = peerTable[1].port,
-            peerIP = peerTable[1].IP;
+        let noOfPeers = peerTable.length;
+        let HEADER_SIZE = 12 + 8 * noOfPeers;
 
         //fill by default header fields:
         version = 3314;
@@ -63,10 +61,10 @@ module.exports = {
 
             //address
             let ip = peerTable[i]['IP'].split('.');
-            this.message[16 + 8 * i] = IP[0];
-            this.message[17 + 8 * i] = IP[1];
-            this.message[18 + 8 * i] = IP[2];
-            this.message[19 + 8 * i] = IP[3];
+            this.message[16 + 8 * i] = ip[0];
+            this.message[17 + 8 * i] = ip[1];
+            this.message[18 + 8 * i] = ip[2];
+            this.message[19 + 8 * i] = ip[3];
         }
     },
 
