@@ -9,6 +9,7 @@ let os = require('os');
 let ifaces = os.networkInterfaces();
 let HOST = '';
 let PORT = singleton.getPort(); //get random port number
+let imagePort = singleton.getPort();
 
 // get the loaclhost ip address
 Object.keys(ifaces).forEach(function (ifname) {
@@ -40,6 +41,21 @@ if (maxpeers < 1) {
 }
 let version = options.version || 3314;
 
+
+// initialize peer table
+let peerTable = [];
+
+//create image socket
+let imageDB = net.createServer();
+imageDB.listen(imagePort, HOST);
+
+console.log('ImageDB server is started at timestamp: ' + singleton.getTimestamp() + ' and is listening on ' + HOST + ':' + imagePort);
+
+imageDB.on('connection', function (sock) {
+    handler.handleImageClient(sock, peerLocation, peerTable, maxpeers); //called for each client joining
+});
+
+
 if (options['peer'] != null) {
     // call as node peer [-p <serverIP>:<port> -n <maxpeers> -v <version>]
 
@@ -51,8 +67,8 @@ if (options['peer'] != null) {
 
     // connect to the known peer address
     let clientPeer = new net.Socket();
-    // initialize peer table
-    let peerTable = [];
+
+    //initialize peering declined table
     let peeringDeclinedTable = [];
 
     //establish peer connection
@@ -73,18 +89,13 @@ if (options['peer'] != null) {
     serverPeer.listen(PORT, HOST);
     console.log('This peer address is ' + HOST + ':' + PORT + ' located at ' + peerLocation);
 
-    // initialize peer table
-    let peerTable = [];
-
-
     serverPeer.on('connection', function (sock) {
         // received connection request
         sock.on('data', data => {
-            console.log(`receiced port number: `);
-            console.log(data);
             handler.handleClientJoining(sock, data, maxpeers, peerLocation, peerTable);
         })
     });
+
 }
 
 

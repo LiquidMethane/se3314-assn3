@@ -1,21 +1,224 @@
 let net = require('net'),
     cPTPpacket = require('./cPTPmessage'),
+    ITPpacket = require('./ITPpacketResponse'),
     singleton = require('./Singleton');
+
+const fs = require('fs');
+
+let nickNames = [],
+    startTimestamp = [],
+    searchIDList = [],
+    sequenceNumberList = [];
+
+let imageDBSocket = null;
 
 function handleClientJoining(sock, data, maxPeers, sender, peerTable) { //when other peer join you
 
-    let port = bytes2number(data.slice(0, 2));
+    // console.log(`server received some message.`);
+    // console.log(data);
 
-    // console.log(`handling peer join from ${port}`)
+    if (data.length == 2) {
+        let port = bytes2number(data.slice(0, 2));
 
-    if (peerTable.length == maxPeers) {
-        declineClient(sock, port, sender, peerTable);
-    } else {
-        handleClient(sock, port, sender, peerTable)
+        // console.log(`handling peer join from ${port}`)
+
+        if (peerTable.length == maxPeers) {
+            declineClient(sock, port, sender, peerTable);
+        } else {
+            handleClient(sock, port, sender, peerTable)
+        }
+
+        console.log("\ncurrent peer table: ");
+        console.log(peerTable);
     }
-    console.log("\ncurrent peer table: ");
-    console.log(peerTable);
+
+    else {
+        // console.log(`\nReceived search request`);
+
+        let id = bytes2number(data.slice(8, 12));
+
+        //check if id exists in list
+        let idExists = false;
+        searchIDList.forEach(element => {
+            if (element == id)
+                idExists = true;
+        });
+
+        // console.log(`\nsearch ID list`);
+        console.log(searchIDList);
+
+        if (!idExists) {
+
+            console.log(`\nsearch id ${id} does not exist`);
+
+            //stores id in search id list
+            if (searchIDList.length == maxPeers)
+                searchIDList.splice(0, 1);
+            searchIDList.push(id);
+
+            let peerPort = bytes2number(data.slice(14, 16));
+            let peerIP = bytes2number(data.slice(16, 17)) + '.'
+                + bytes2number(data.slice(17, 18)) + '.'
+                + bytes2number(data.slice(18, 19)) + '.'
+                + bytes2number(data.slice(19, 20));
+            let imageFilename = bytes2string(data.slice(20));
+
+            console.log(`\nid: ${id}\nport: ${peerPort}\nIP: ${peerIP}\nimage file name: ${imageFilename}`);
+
+            fs.readFile('./images/' + imageFilename, (err, data) => {
+                if (!err) {
+                    var infile = fs.createReadStream('images/' + imageFilename);
+                    const imageChunks = [];
+                    infile.on('data', function (chunk) {
+                        imageChunks.push(chunk);
+                    });
+
+                    infile.on('close', function () {
+                        let image = Buffer.concat(imageChunks);
+                        ITPpacket.init(1, singleton.getSequenceNumber(), singleton.getTimestamp(), image, image.length);
+
+                        let socket = new net.Socket();
+                        socket.connect(peerPort, peerIP, () => {
+                            socket.end(ITPpacket.getPacket());
+                            console.log(`Image found and returned to originating peer`);
+                        });
+
+
+                    });
+                } else { //file not found
+                    console.log('File not found');
+
+                    cPTPpacket.init(3, sender, peerTable, id, peerPort, peerIP, imageFilename);
+                    let queryMessage = cPTPpacket.getPacket();
+                    // console.log(queryMessage);
+
+                    peerTable.forEach(peer => {
+                        //check if its pending
+                        if (peer['pending'] == false) {
+                            //make sure query not sent back to originating peer
+                            if (peer['port'] != peerPort || peer['IP'] != peerIP) {
+                                let socket = new net.Socket();
+                                socket.connect(peer['port'], peer['IP'], () => {
+                                    socket.end(queryMessage);
+                                    console.log(`sent search query to ${peer['IP']}:${peer['port']}`);
+                                });
+                            }
+                        }
+
+
+                    })
+
+                }
+            });
+
+        }
+
+    }
+
+
 };
+
+function handleImageClient(sock, sender, peerTable, maxPeers) {
+
+    assignClientName(sock, nickNames);
+
+    console.log('\n' + nickNames[sock.id] + ' is connected at timestamp: ' + startTimestamp[sock.id]);
+
+    sock.on('data', data => {
+
+        let msgType = bytes2number(data.slice(3, 4));
+
+        if (msgType == 0) {
+            imageDBSocket = sock;
+            handleClientRequests(data, sender, sock, peerTable); //read client requests and respond
+        }
+
+        else if (msgType == 1) {
+
+            let sn = bytes2number(data.slice(4, 8));
+
+            let snExists = false;
+            sequenceNumberList.forEach(element => {
+                if (sn == element)
+                    snExists = true;
+            });
+
+            if (!snExists) {
+
+                if (sequenceNumberList.length == maxPeers)
+                    sequenceNumberList.splice(0, 1);
+                sequenceNumberList.push(sn);
+
+                imageDBSocket.write(data);
+                imageDBSocket.end();
+
+            }
+
+        }
+
+    });
+
+    sock.on('end', () => {
+
+        handleClientLeaving(sock);
+    });
+
+    sock.on('close', function () {
+        // handleClientLeaving(sock);
+    });
+}
+
+function handleClientRequests(data, sender, sock, peerTable) {
+    let version = bytes2number(data.slice(0, 3));
+    let requestType = bytes2number(data.slice(3, 4));
+    let imageFilename = bytes2string(data.slice(4));
+
+    console.log('\n' + nickNames[sock.id] + ' requests:'
+        + '\n    --ITP version: ' + version
+        + '\n    --Request type: ' + requestType
+        + '\n    --Image file name: \'' + imageFilename + '\'\n');
+
+    fs.readFile('images/' + imageFilename, (err, data) => {
+        if (!err) {
+            var infile = fs.createReadStream('images/' + imageFilename);
+            const imageChunks = [];
+            infile.on('data', function (chunk) {
+                imageChunks.push(chunk);
+            });
+
+            infile.on('close', function () {
+                let image = Buffer.concat(imageChunks);
+                ITPpacket.init(1, singleton.getSequenceNumber(), singleton.getTimestamp(), image, image.length);
+                sock.end(ITPpacket.getPacket());
+            });
+        } else { //file not found
+            console.log('File not found');
+
+            let id = singleton.getId();
+            console.log(id);
+            // console.log(queryMessage);
+
+            peerTable.forEach(peer => {
+                //check if its pending
+                if (peer['pending'] == false) {
+                    let socket1 = new net.Socket();
+                    socket1.connect(peer['port'], peer['IP'], () => {
+
+                        cPTPpacket.init(3, sender, peerTable, id, sock.localPort, sock.localAddress, imageFilename);
+                        let queryMessage = cPTPpacket.getPacket();
+
+                        socket1.end(queryMessage);
+                        console.log(`sent search query to ${peer['IP']}:${peer['port']}`);
+
+                    })
+                }
+
+            })
+
+        }
+    });
+}
+
 
 
 function handleCommunications(peerLocalPort, client, maxPeers, location, peerTable, peeringDeclinedTable) {
@@ -32,19 +235,21 @@ function handleCommunications(peerLocalPort, client, maxPeers, location, peerTab
 
     client.write(buffer);
 
-    console.log(`\nconnection with ${client.remoteAddress}:${client.remotePort} is being handled. `);
+    // console.log(`\nconnection with ${client.remoteAddress}:${client.remotePort} is being handled. `);
 
 
     client.on('data', (message) => {
+
+        let version = bytes2number(message.slice(0, 3));
+        let msgType = bytes2number(message.slice(3, 4));
+        let sender = bytes2string(message.slice(4, 8));
 
         // console.log(`got message from ${client.remoteAddress}:${client.remotePort}\nReceived: `);
         // console.log(message);
 
         localAddress = client.localAddress;
 
-        let version = bytes2number(message.slice(0, 3));
-        let msgType = bytes2number(message.slice(3, 4));
-        let sender = bytes2string(message.slice(4, 8));
+
         let numberOfPeers = bytes2number(message.slice(8, 12));
 
         //populate returned_peer array with returned peers
@@ -61,8 +266,8 @@ function handleCommunications(peerLocalPort, client, maxPeers, location, peerTab
 
         }
 
-        console.log("\nreturned peers: ");
-        console.log(returned_peer);
+        // console.log("\nreturned peers: ");
+        // console.log(returned_peer);
 
 
         if (msgType == 1) { //server welcomes you
@@ -97,7 +302,7 @@ function handleCommunications(peerLocalPort, client, maxPeers, location, peerTab
             }
 
             //add peer into peeringdeclined table
-            if (peeringDeclinedTable.length == maxPeers)
+            if (peeringDeclinedTable.length == 2 * maxPeers)
                 peeringDeclinedTable.splice(0, 1);
             peeringDeclinedTable.push({ 'port': client.remotePort, 'IP': client.remoteAddress });
 
@@ -117,6 +322,12 @@ function handleCommunications(peerLocalPort, client, maxPeers, location, peerTab
         console.log(peerTable);
         console.log(`\ncurrent peering declined table: `);
         console.log(peeringDeclinedTable);
+
+
+
+
+
+
     });
 
     //handle server shut down socket
@@ -185,6 +396,7 @@ function handleCommunications(peerLocalPort, client, maxPeers, location, peerTab
 
             //handle incomming connection
             serverPeer.on('connection', function (sock) {
+                console.log(`\nnew connection established.`);
                 // handleClientJoining(sock, maxPeers, location, peerTable);
                 sock.on('data', data => {
                     handleClientJoining(sock, data, maxPeers, location, peerTable);
@@ -194,27 +406,37 @@ function handleCommunications(peerLocalPort, client, maxPeers, location, peerTab
             serverPeer.on('error', err => {
                 if (err.code !== 'EADDRINUSE') {
                     throw err;
-                  }
+                }
             })
 
         }
-
-
-
 
     });
 
 };
 
+
+function handleClientLeaving(sock) {
+    console.log(nickNames[sock.id] + ' closed the connection');
+}
+
+function assignClientName(sock, nickNames) {
+    sock.id = sock.remoteAddress + ':' + sock.remotePort;
+    startTimestamp[sock.id] = singleton.getTimestamp();
+    var name = 'Client-' + startTimestamp[sock.id];
+    nickNames[sock.id] = name;
+}
+
 module.exports = {
     handleClientJoining,
-    handleCommunications
+    handleCommunications,
+    handleImageClient,
 };
 
 function requestConnection(port, address, maxPeers, location, peerTable, peeringDeclinedTable, peerLocalPort) {
 
     let sock = new net.Socket();
-    console.log('\n\nestablishing connection with ' + address + ":" + port);
+    // console.log('\n\nestablishing connection with ' + address + ":" + port);
     sock.connect(
         {
             port: port,
@@ -222,7 +444,7 @@ function requestConnection(port, address, maxPeers, location, peerTable, peering
             // localPort: localPort,
             // localAddress: localAddress,
         }, function () {
-            console.log(`connected with ${address}:${port}, local address: ${sock.localAddress}:${sock.localPort}`);
+            // console.log(`connected with ${address}:${port}, local address: ${sock.localAddress}:${sock.localPort}`);
             peerTable.push({ 'port': port, 'IP': address, "pending": true });
             handleCommunications(peerLocalPort, sock, maxPeers, location, peerTable, peeringDeclinedTable);
         });
@@ -289,11 +511,3 @@ Array.prototype.contains = (port, IP) => {
     });
     return false;
 }
-
-// function wait(ms) {
-//     var start = Date.now(),
-//         now = start;
-//     while (now - start < ms) {
-//         now = Date.now();
-//     }
-// }

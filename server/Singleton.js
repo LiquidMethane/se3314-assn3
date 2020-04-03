@@ -2,6 +2,7 @@
 let sequenceNumber;
 let timerInterval = 10;
 let timer;
+let id;
 
 function timerRun() {
     timer ++;
@@ -37,6 +38,10 @@ module.exports = {
     //--------------------------
     getPort: function() {
         return  Math.floor( Math.random()*49151) + 1024;
+    },
+
+    getId: () => {
+        return Math.floor( Math.random()* 32767 );
     }
 
 
