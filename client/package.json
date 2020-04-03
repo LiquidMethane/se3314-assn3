@@ -1,0 +1,12 @@
+{
+  "name": "se3314-assn3-client",
+  "version": "1.0.0",
+  "description": "",
+  "main": "GetImage.js",
+  "dependencies": {
+    "opn": "^5.4.0"
+  },
+  "devDependencies": {},
+  "author": "Ruiqi Tian",
+  "license": "ISC"
+}
